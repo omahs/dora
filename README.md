@@ -1,5 +1,5 @@
 <p align="center">
-    <img src="./docs/src/logo.svg" width="400">
+    <img src"https://dora-rs.ai/img/logo.png" width="400">
 </p>
 
 <h2 align="center">
