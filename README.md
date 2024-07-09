@@ -5,7 +5,7 @@
 <h2 align="center">
   <a href="https://www.dora-rs.ai">Website</a>
   |
-  <a href="https://www.dora-rs.ai/docs/api/python-api">Python API</a>
+  <a href="https://dora-rs.ai/python-api.html">Python API</a>
   -
   <a href="https://docs.rs/dora-node-api/latest/dora_node_api/">Rust API</a>
   |
@@ -61,15 +61,14 @@ Each node defines its inputs and outputs to connect with other nodes.
 ```yaml
 nodes:
   - id: webcam
-    custom:
-      source: webcam.py
-      inputs:
-        tick: dora/timer/millis/50
-      outputs:
-        - image
+    path: webcam.py
+    inputs:
+      tick: dora/timer/millis/50
+    outputs:
+      - image
 
   - id: object_detection
-    custom:
+    path:
       source: object_detection.py
       inputs:
         image: webcam/image
