@@ -48,7 +48,7 @@ struct Args {
 
 /// dora-rs cli client
 #[derive(Debug, clap::Subcommand)]
-enum Command {
+pub enum Command {
     /// Check if the coordinator and the daemon is running.
     Check {
         /// Path to the dataflow descriptor file (enables additional checks)
@@ -248,7 +248,7 @@ enum Lang {
     Cxx,
 }
 
-fn run(command: Command) -> eyre::Result<()> {
+pub fn run(command: Command) -> eyre::Result<()> {
     let log_level = env_logger::Builder::new()
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()

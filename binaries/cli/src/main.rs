@@ -1,11 +1,13 @@
 use clap::Parser;
-use dora_cli::Command;
+use colored::Colorize;
+use dora_cli::{run, Command};
 #[cfg(feature = "tracing")]
 use dora_tracing::set_up_tracing;
+use dora_tracing::set_up_tracing_opts;
 use eyre::Context;
 
 fn main() {
-    if let Err(err) = run() {
+    if let Err(err) = main_inner() {
         eprintln!("\n\n{}", "[ERROR]".bold().red());
         eprintln!("{err:#}");
         std::process::exit(1);
@@ -48,5 +50,5 @@ fn main_inner() -> eyre::Result<()> {
         }
     };
 
-    dora_cli::run(args.command)
+    run(args.command)
 }
