@@ -2291,6 +2291,7 @@ dependencies = [
  "tracing",
  "uuid",
  "webbrowser",
+ "which",
 ]
 
 [[package]]
@@ -2377,6 +2378,7 @@ dependencies = [
 name = "dora-examples"
 version = "0.0.0"
 dependencies = [
+ "dora-cli",
  "dora-coordinator",
  "dora-core",
  "dora-download",
@@ -2468,6 +2470,7 @@ name = "dora-node-api-python"
 version = "0.3.5"
 dependencies = [
  "arrow",
+ "dora-cli",
  "dora-node-api",
  "dora-operator-api-python",
  "dora-ros2-bridge-python",

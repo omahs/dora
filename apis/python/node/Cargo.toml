@@ -16,6 +16,7 @@ telemetry = ["dora-runtime/telemetry"]
 [dependencies]
 dora-node-api = { workspace = true }
 dora-operator-api-python = { workspace = true }
+dora-cli = { workspace = true }
 pyo3.workspace = true
 eyre = "0.6"
 serde_yaml = "0.8.23"

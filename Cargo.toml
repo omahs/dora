@@ -46,6 +46,7 @@ license = "Apache-2.0"
 
 [workspace.dependencies]
 dora-node-api = { version = "0.3.5", path = "apis/rust/node", default-features = false }
+dora-cli = { version = "0.3.5", path = "binaries/cli", default-features = false }
 dora-node-api-python = { version = "0.3.5", path = "apis/python/node", default-features = false }
 dora-operator-api = { version = "0.3.5", path = "apis/rust/operator", default-features = false }
 dora-operator-api-macros = { version = "0.3.5", path = "apis/rust/operator/macros" }
@@ -71,7 +72,11 @@ arrow = { version = "52" }
 arrow-schema = { version = "52" }
 arrow-data = { version = "52" }
 arrow-array = { version = "52" }
-pyo3 = { version = "0.21", features = ["eyre", "abi3-py37", "multiple-pymethods"] }
+pyo3 = { version = "0.21", features = [
+    "eyre",
+    "abi3-py37",
+    "multiple-pymethods",
+] }
 pythonize = "0.21"
 
 [package]
@@ -92,6 +97,7 @@ dora-coordinator = { workspace = true }
 dora-core = { workspace = true }
 dora-tracing = { workspace = true }
 dora-download = { workspace = true }
+dora-cli = { version = "0.3.5", path = "binaries/cli", default-features = false }
 dunce = "1.0.2"
 serde_yaml = "0.8.23"
 uuid = { version = "1.7", features = ["v7", "serde"] }

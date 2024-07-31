@@ -1,11 +1,17 @@
 use crate::{check::daemon_running, connect_to_coordinator, LOCALHOST};
 use dora_core::topics::{ControlRequest, DORA_COORDINATOR_PORT_CONTROL_DEFAULT};
 use eyre::Context;
-use std::{fs, net::SocketAddr, path::Path, process::Command, time::Duration};
+use std::{
+    fs,
+    net::SocketAddr,
+    path::{Path, PathBuf},
+    process::Command,
+    time::Duration,
+};
 #[derive(Debug, Default, serde::Serialize, serde::Deserialize)]
 struct UpConfig {}
 
-pub(crate) fn up(config_path: Option<&Path>) -> eyre::Result<()> {
+pub fn up(config_path: Option<&Path>) -> eyre::Result<()> {
     let UpConfig {} = parse_dora_config(config_path)?;
     let coordinator_addr = (LOCALHOST, DORA_COORDINATOR_PORT_CONTROL_DEFAULT).into();
     let mut session = match connect_to_coordinator(coordinator_addr) {
@@ -46,7 +52,7 @@ pub(crate) fn up(config_path: Option<&Path>) -> eyre::Result<()> {
     Ok(())
 }
 
-pub(crate) fn destroy(
+pub fn destroy(
     config_path: Option<&Path>,
     coordinator_addr: SocketAddr,
 ) -> Result<(), eyre::ErrReport> {
@@ -81,9 +87,24 @@ fn parse_dora_config(config_path: Option<&Path>) -> Result<UpConfig, eyre::ErrRe
     Ok(config)
 }
 
+fn get_dora_path() -> eyre::Result<PathBuf> {
+    let current_exe = std::env::current_exe().wrap_err("failed to get current executable path")?;
+    let is_dora = current_exe
+        .file_name()
+        .map(|file_name| file_name.to_string_lossy() == "dora")
+        .unwrap_or(false);
+
+    if !is_dora {
+        // If dora up was spawned from an embedded binary, we need to find the dora binary.
+        which::which("dora").wrap_err("failed to find `dora-coordinator`")
+    } else {
+        Ok(current_exe)
+    }
+}
+
 fn start_coordinator() -> eyre::Result<()> {
-    let mut cmd =
-        Command::new(std::env::current_exe().wrap_err("failed to get current executable path")?);
+    let dora_path = get_dora_path().context("could not get dora path")?;
+    let mut cmd = Command::new(dora_path);
     cmd.arg("coordinator");
     cmd.arg("--quiet");
     cmd.spawn().wrap_err("failed to run `dora coordinator`")?;
@@ -94,8 +115,8 @@ fn start_coordinator() -> eyre::Result<()> {
 }
 
 fn start_daemon() -> eyre::Result<()> {
-    let mut cmd =
-        Command::new(std::env::current_exe().wrap_err("failed to get current executable path")?);
+    let dora_path = get_dora_path().context("could not get dora path")?;
+    let mut cmd = Command::new(dora_path);
     cmd.arg("daemon");
     cmd.arg("--quiet");
     cmd.spawn().wrap_err("failed to run `dora daemon`")?;

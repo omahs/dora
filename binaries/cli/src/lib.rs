@@ -1,6 +1,3 @@
-use attach::attach_dataflow;
-use clap::Parser;
-use colored::Colorize;
 use communication_layer_request_reply::{RequestReplyLayer, TcpLayer, TcpRequestReplyConnection};
 use dora_coordinator::Event;
 use dora_core::{
@@ -11,30 +8,31 @@ use dora_core::{
     },
 };
 use dora_daemon::Daemon;
-#[cfg(feature = "tracing")]
-use dora_tracing::set_up_tracing;
-use dora_tracing::set_up_tracing_opts;
 use duration_str::parse;
 use eyre::{bail, Context};
 use formatting::FormatDataflowError;
+use start::start;
 use std::{io::Write, net::SocketAddr};
 use std::{
     net::{IpAddr, Ipv4Addr},
     path::PathBuf,
     time::Duration,
 };
+use stop::{stop_dataflow, stop_dataflow_by_name, stop_dataflow_interactive};
 use tabwriter::TabWriter;
 use tokio::runtime::Builder;
 use uuid::Uuid;
 
 mod attach;
-mod build;
+pub mod build;
 mod check;
 mod formatting;
 mod graph;
 mod logs;
+pub mod start;
+pub mod stop;
 mod template;
-mod up;
+pub mod up;
 
 const LOCALHOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 const LISTEN_WILDCARD: IpAddr = IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0));
@@ -323,53 +321,16 @@ pub fn run(command: Command) -> eyre::Result<()> {
             detach,
             hot_reload,
         } => {
-            let dataflow_descriptor =
-                Descriptor::blocking_read(&dataflow).wrap_err("Failed to read yaml dataflow")?;
-            let working_dir = dataflow
-                .canonicalize()
-                .context("failed to canonicalize dataflow path")?
-                .parent()
-                .ok_or_else(|| eyre::eyre!("dataflow path has no parent dir"))?
-                .to_owned();
-            if !coordinator_addr.is_loopback() {
-                dataflow_descriptor.check_in_daemon(&working_dir, &[], true)?;
-            } else {
-                dataflow_descriptor
-                    .check(&working_dir)
-                    .wrap_err("Could not validate yaml")?;
-            }
-
-            let coordinator_socket = (coordinator_addr, coordinator_port).into();
-            let mut session = connect_to_coordinator(coordinator_socket)
-                .wrap_err("failed to connect to dora coordinator")?;
-            let dataflow_id = start_dataflow(
-                dataflow_descriptor.clone(),
+            let _uuid = start(
+                dataflow,
                 name,
-                working_dir,
-                &mut *session,
+                coordinator_addr,
+                coordinator_port,
+                attach,
+                detach,
+                hot_reload,
+                Some(log_level),
             )?;
-
-            let attach = match (attach, detach) {
-                (true, true) => eyre::bail!("both `--attach` and `--detach` are given"),
-                (true, false) => true,
-                (false, true) => false,
-                (false, false) => {
-                    println!("attaching to dataflow (use `--detach` to run in background)");
-                    true
-                }
-            };
-
-            if attach {
-                attach_dataflow(
-                    dataflow_descriptor,
-                    dataflow,
-                    dataflow_id,
-                    &mut *session,
-                    hot_reload,
-                    coordinator_socket,
-                    log_level,
-                )?
-            }
         }
         Command::List {
             coordinator_addr,
@@ -469,76 +430,6 @@ pub fn run(command: Command) -> eyre::Result<()> {
     Ok(())
 }
 
-fn start_dataflow(
-    dataflow: Descriptor,
-    name: Option<String>,
-    local_working_dir: PathBuf,
-    session: &mut TcpRequestReplyConnection,
-) -> Result<Uuid, eyre::ErrReport> {
-    let reply_raw = session
-        .request(
-            &serde_json::to_vec(&ControlRequest::Start {
-                dataflow,
-                name,
-                local_working_dir,
-            })
-            .unwrap(),
-        )
-        .wrap_err("failed to send start dataflow message")?;
-
-    let result: ControlRequestReply =
-        serde_json::from_slice(&reply_raw).wrap_err("failed to parse reply")?;
-    match result {
-        ControlRequestReply::DataflowStarted { uuid } => {
-            eprintln!("{uuid}");
-            Ok(uuid)
-        }
-        ControlRequestReply::Error(err) => bail!("{err}"),
-        other => bail!("unexpected start dataflow reply: {other:?}"),
-    }
-}
-
-fn stop_dataflow_interactive(
-    grace_duration: Option<Duration>,
-    session: &mut TcpRequestReplyConnection,
-) -> eyre::Result<()> {
-    let list = query_running_dataflows(session).wrap_err("failed to query running dataflows")?;
-    let active = list.get_active();
-    if active.is_empty() {
-        eprintln!("No dataflows are running");
-    } else {
-        let selection = inquire::Select::new("Choose dataflow to stop:", active).prompt()?;
-        stop_dataflow(selection.uuid, grace_duration, session)?;
-    }
-
-    Ok(())
-}
-
-fn stop_dataflow(
-    uuid: Uuid,
-    grace_duration: Option<Duration>,
-    session: &mut TcpRequestReplyConnection,
-) -> Result<(), eyre::ErrReport> {
-    let reply_raw = session
-        .request(
-            &serde_json::to_vec(&ControlRequest::Stop {
-                dataflow_uuid: uuid,
-                grace_duration,
-            })
-            .unwrap(),
-        )
-        .wrap_err("failed to send dataflow stop message")?;
-    let result: ControlRequestReply =
-        serde_json::from_slice(&reply_raw).wrap_err("failed to parse reply")?;
-    match result {
-        ControlRequestReply::DataflowStopped { uuid, result } => {
-            handle_dataflow_result(result, Some(uuid))
-        }
-        ControlRequestReply::Error(err) => bail!("{err}"),
-        other => bail!("unexpected stop dataflow reply: {other:?}"),
-    }
-}
-
 fn handle_dataflow_result(
     result: dora_core::topics::DataflowResult,
     uuid: Option<Uuid>,
@@ -556,32 +447,6 @@ fn handle_dataflow_result(
         })
     }
 }
-
-fn stop_dataflow_by_name(
-    name: String,
-    grace_duration: Option<Duration>,
-    session: &mut TcpRequestReplyConnection,
-) -> Result<(), eyre::ErrReport> {
-    let reply_raw = session
-        .request(
-            &serde_json::to_vec(&ControlRequest::StopByName {
-                name,
-                grace_duration,
-            })
-            .unwrap(),
-        )
-        .wrap_err("failed to send dataflow stop_by_name message")?;
-    let result: ControlRequestReply =
-        serde_json::from_slice(&reply_raw).wrap_err("failed to parse reply")?;
-    match result {
-        ControlRequestReply::DataflowStopped { uuid, result } => {
-            handle_dataflow_result(result, Some(uuid))
-        }
-        ControlRequestReply::Error(err) => bail!("{err}"),
-        other => bail!("unexpected stop dataflow reply: {other:?}"),
-    }
-}
-
 fn list(session: &mut TcpRequestReplyConnection) -> Result<(), eyre::ErrReport> {
     let list = query_running_dataflows(session)?;
 
