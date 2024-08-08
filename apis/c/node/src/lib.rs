@@ -1,7 +1,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use arrow_array::UInt8Array;
-use dora_node_api::{arrow::array::AsArray, DoraNode, Event, EventStream};
+use dora_node_api::{arrow::array::AsArray, DoraNode, Event, EventStream, MetadataParameters};
 use eyre::Context;
 use std::{ffi::c_void, ptr, slice};
 
@@ -269,9 +269,12 @@ unsafe fn try_send_output(
     let id = std::str::from_utf8(unsafe { slice::from_raw_parts(id_ptr, id_len) })?;
     let output_id = id.to_owned().into();
     let data = unsafe { slice::from_raw_parts(data_ptr, data_len) };
-    context
-        .node
-        .send_output_raw(output_id, Default::default(), data.len(), |out| {
+    context.node.send_output_raw(
+        output_id,
+        MetadataParameters::default(),
+        data.len(),
+        |out| {
             out.copy_from_slice(data);
-        })
+        },
+    )
 }
